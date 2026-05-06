@@ -129,6 +129,14 @@
     letter-spacing: 0.05em;
   }
 
+  .habit-note {
+    font-size: 10px;
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+    margin-top: 2px;
+    font-weight: 400;
+  }
+
   .habit-stats {
     font-size: 10px;
     color: var(--ink-soft);
@@ -401,6 +409,49 @@
     position: relative;
   }
 
+  .chart-large {
+    height: 160px;
+    margin-top: 16px;
+  }
+
+  .combined-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .combined-input-cell .numeric-input-row {
+    margin-bottom: 0;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  .dot-weight {
+    background: #3a6ea5;
+  }
+
+  .dot-fat {
+    background: #c7503f;
+  }
+
+  @media (max-width: 480px) {
+    .combined-inputs {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+  }
+
   /* ============ 365 GRID ============ */
   .grid-365 {
     background: var(--paper);
@@ -617,10 +668,10 @@ const STORAGE_KEY = 'shouzhang_v1';
 
 const defaultData = {
   annual: [
-    { id: 'shower', name: '早洗澡' },
-    { id: 'exercise', name: '运动' },
-    { id: 'focus', name: '专注' },
-    { id: 'reading', name: '阅读' }
+    { id: 'shower', name: '早洗澡', note: '23:00 前进浴室' },
+    { id: 'exercise', name: '运动', note: 'gym / 网球 / 跳舞' },
+    { id: 'focus', name: '专注', note: '≥25 分钟无打扰深度工作' },
+    { id: 'reading', name: '阅读', note: '读书 ≥15 分钟（非碎片）' }
   ],
   monthly: [
     { id: 'weight_log', name: '体重记录' },
@@ -653,14 +704,25 @@ function loadData() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge with defaults to handle missing fields
-      return {
+      const merged = {
         ...defaultData,
         ...parsed,
         checks: parsed.checks || {},
         numericData: parsed.numericData || {},
         grid365: parsed.grid365 || {}
       };
+      // 给已有的默认项目补上note（如果用户从v2升级上来）
+      const defaultNotes = {};
+      defaultData.annual.forEach(h => { defaultNotes[h.id] = h.note; });
+      if (merged.annual) {
+        merged.annual = merged.annual.map(h => {
+          if (h.note === undefined && defaultNotes[h.id]) {
+            return { ...h, note: defaultNotes[h.id] };
+          }
+          return h;
+        });
+      }
+      return merged;
     }
   } catch(e) { console.error(e); }
   return JSON.parse(JSON.stringify(defaultData));
@@ -733,7 +795,10 @@ function renderAnnual() {
 
     card.innerHTML = `
       <div class="habit-label">
-        <div class="habit-name">${escapeHTML(habit.name)}</div>
+        <div>
+          <div class="habit-name">${escapeHTML(habit.name)}</div>
+          ${habit.note ? `<div class="habit-note">${escapeHTML(habit.note)}</div>` : ''}
+        </div>
         <div class="habit-stats">本周 ${weekCount}/7 · ${monthStr} · 全年 ${yearCount}</div>
       </div>
       <div class="year-rows" id="rows-${habit.id}"></div>
@@ -854,43 +919,114 @@ function renderNumeric() {
   const container = document.getElementById('numericSection');
   container.innerHTML = '';
 
-  data.numeric.forEach(metric => {
-    const records = data.numericData[metric.id] || [];
-    const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
-    const latest = sorted[sorted.length - 1];
+  // 找到体重和体脂两个项（用id判断，兼容老数据）
+  const weight = data.numeric.find(m => m.id === 'weight');
+  const fat = data.numeric.find(m => m.id === 'bodyfat');
+  const others = data.numeric.filter(m => m.id !== 'weight' && m.id !== 'bodyfat');
 
-    const item = document.createElement('div');
-    item.className = 'numeric-item';
-    item.innerHTML = `
-      <div class="numeric-header">
-        <div class="numeric-name">${escapeHTML(metric.name)}</div>
-        <div class="numeric-latest">${latest ? `最近：${latest.value} · ${latest.date}` : '暂无记录'}</div>
-      </div>
-      <div class="numeric-input-row">
-        <input type="number" step="0.1" class="numeric-input" id="ni-${metric.id}" placeholder="今日数值">
-        <button class="numeric-submit" data-id="${metric.id}">记录</button>
-      </div>
-      <div class="chart-container">
-        <canvas id="chart-${metric.id}" style="width:100%;height:80px;"></canvas>
-      </div>
-    `;
-    container.appendChild(item);
+  // 如果体重体脂都存在，用组合视图
+  if (weight && fat) {
+    renderCombinedWeightFat(container, weight, fat);
+  } else {
+    // 否则各自渲染
+    if (weight) renderSingleNumeric(container, weight);
+    if (fat) renderSingleNumeric(container, fat);
+  }
 
-    item.querySelector('.numeric-submit').addEventListener('click', () => {
-      const input = item.querySelector(`#ni-${metric.id}`);
+  // 其他自定义数值项各自渲染
+  others.forEach(metric => renderSingleNumeric(container, metric));
+}
+
+function renderCombinedWeightFat(container, weight, fat) {
+  const weightRecords = (data.numericData[weight.id] || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const fatRecords = (data.numericData[fat.id] || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const latestW = weightRecords[weightRecords.length - 1];
+  const latestF = fatRecords[fatRecords.length - 1];
+
+  const block = document.createElement('div');
+  block.innerHTML = `
+    <div class="combined-inputs">
+      <div class="combined-input-cell">
+        <div class="numeric-header">
+          <div class="numeric-name"><span class="dot dot-weight"></span>${escapeHTML(weight.name)}</div>
+          <div class="numeric-latest">${latestW ? `${latestW.value} · ${latestW.date.slice(5)}` : '—'}</div>
+        </div>
+        <div class="numeric-input-row">
+          <input type="number" step="0.1" class="numeric-input" id="ni-${weight.id}" placeholder="今日">
+          <button class="numeric-submit" data-id="${weight.id}">记录</button>
+        </div>
+      </div>
+      <div class="combined-input-cell">
+        <div class="numeric-header">
+          <div class="numeric-name"><span class="dot dot-fat"></span>${escapeHTML(fat.name)}</div>
+          <div class="numeric-latest">${latestF ? `${latestF.value} · ${latestF.date.slice(5)}` : '—'}</div>
+        </div>
+        <div class="numeric-input-row">
+          <input type="number" step="0.1" class="numeric-input" id="ni-${fat.id}" placeholder="今日">
+          <button class="numeric-submit" data-id="${fat.id}">记录</button>
+        </div>
+      </div>
+    </div>
+    <div class="chart-container chart-large">
+      <canvas id="chart-combined" style="width:100%;height:160px;"></canvas>
+    </div>
+  `;
+  container.appendChild(block);
+
+  // 绑定输入按钮
+  block.querySelectorAll('.numeric-submit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const input = block.querySelector(`#ni-${id}`);
       const val = parseFloat(input.value);
       if (isNaN(val)) return;
-      if (!data.numericData[metric.id]) data.numericData[metric.id] = [];
-      // remove today's existing record if any
-      data.numericData[metric.id] = data.numericData[metric.id].filter(r => r.date !== todayKey);
-      data.numericData[metric.id].push({ date: todayKey, value: val });
+      if (!data.numericData[id]) data.numericData[id] = [];
+      data.numericData[id] = data.numericData[id].filter(r => r.date !== todayKey);
+      data.numericData[id].push({ date: todayKey, value: val });
       saveData();
       input.value = '';
       renderNumeric();
     });
-
-    drawChart(`chart-${metric.id}`, sorted);
   });
+
+  drawCombinedChart('chart-combined', weightRecords, fatRecords);
+}
+
+function renderSingleNumeric(container, metric) {
+  const records = data.numericData[metric.id] || [];
+  const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
+  const latest = sorted[sorted.length - 1];
+
+  const item = document.createElement('div');
+  item.className = 'numeric-item';
+  item.innerHTML = `
+    <div class="numeric-header">
+      <div class="numeric-name">${escapeHTML(metric.name)}</div>
+      <div class="numeric-latest">${latest ? `最近：${latest.value} · ${latest.date}` : '暂无记录'}</div>
+    </div>
+    <div class="numeric-input-row">
+      <input type="number" step="0.1" class="numeric-input" id="ni-${metric.id}" placeholder="今日数值">
+      <button class="numeric-submit" data-id="${metric.id}">记录</button>
+    </div>
+    <div class="chart-container">
+      <canvas id="chart-${metric.id}" style="width:100%;height:80px;"></canvas>
+    </div>
+  `;
+  container.appendChild(item);
+
+  item.querySelector('.numeric-submit').addEventListener('click', () => {
+    const input = item.querySelector(`#ni-${metric.id}`);
+    const val = parseFloat(input.value);
+    if (isNaN(val)) return;
+    if (!data.numericData[metric.id]) data.numericData[metric.id] = [];
+    data.numericData[metric.id] = data.numericData[metric.id].filter(r => r.date !== todayKey);
+    data.numericData[metric.id].push({ date: todayKey, value: val });
+    saveData();
+    input.value = '';
+    renderNumeric();
+  });
+
+  drawChart(`chart-${metric.id}`, sorted);
 }
 
 function drawChart(canvasId, records) {
@@ -945,6 +1081,162 @@ function drawChart(canvasId, records) {
   ctx.textAlign = 'right';
   ctx.fillText(max.toFixed(1), w - 2, 10);
   ctx.fillText(min.toFixed(1), w - 2, h - 2);
+}
+
+function drawCombinedChart(canvasId, weightRecords, fatRecords) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  const padL = 32; // 左轴标签留位
+  const padR = 32; // 右轴标签留位
+  const padT = 14;
+  const padB = 18; // 底部日期标签留位
+
+  // 取最近60天
+  const wData = weightRecords.slice(-60);
+  const fData = fatRecords.slice(-60);
+
+  if (wData.length === 0 && fData.length === 0) {
+    ctx.fillStyle = '#8a8579';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂无记录', w / 2, h / 2);
+    return;
+  }
+
+  // 收集所有日期，作为统一的X轴
+  const allDates = [...new Set([
+    ...wData.map(r => r.date),
+    ...fData.map(r => r.date)
+  ])].sort();
+
+  if (allDates.length === 0) return;
+
+  const dateIndex = {};
+  allDates.forEach((d, i) => dateIndex[d] = i);
+
+  // 各自的Y轴范围（带一点padding）
+  const wValues = wData.map(r => r.value);
+  const fValues = fData.map(r => r.value);
+  const wMin = wValues.length ? Math.min(...wValues) : 0;
+  const wMax = wValues.length ? Math.max(...wValues) : 1;
+  const fMin = fValues.length ? Math.min(...fValues) : 0;
+  const fMax = fValues.length ? Math.max(...fValues) : 1;
+  // padding 让线不贴边
+  const wPad = (wMax - wMin) * 0.15 || 0.5;
+  const fPad = (fMax - fMin) * 0.15 || 0.5;
+  const wRange = (wMax + wPad) - (wMin - wPad) || 1;
+  const fRange = (fMax + fPad) - (fMin - fPad) || 1;
+  const wLow = wMin - wPad;
+  const fLow = fMin - fPad;
+
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+
+  // 网格线（淡淡的横线）
+  ctx.strokeStyle = '#e8e4d8';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (innerH / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+  }
+
+  function xPos(date) {
+    if (allDates.length === 1) return padL + innerW / 2;
+    return padL + (dateIndex[date] / (allDates.length - 1)) * innerW;
+  }
+
+  // ===== 画体重（蓝色）=====
+  const weightColor = '#3a6ea5';
+  if (wData.length > 0) {
+    ctx.strokeStyle = weightColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    wData.forEach((rec, i) => {
+      const x = xPos(rec.date);
+      const y = padT + innerH - ((rec.value - wLow) / wRange) * innerH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // dots
+    ctx.fillStyle = weightColor;
+    wData.forEach(rec => {
+      const x = xPos(rec.date);
+      const y = padT + innerH - ((rec.value - wLow) / wRange) * innerH;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // ===== 画体脂（红色）=====
+  const fatColor = '#c7503f';
+  if (fData.length > 0) {
+    ctx.strokeStyle = fatColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    fData.forEach((rec, i) => {
+      const x = xPos(rec.date);
+      const y = padT + innerH - ((rec.value - fLow) / fRange) * innerH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // dots
+    ctx.fillStyle = fatColor;
+    fData.forEach(rec => {
+      const x = xPos(rec.date);
+      const y = padT + innerH - ((rec.value - fLow) / fRange) * innerH;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // ===== 左Y轴标签（蓝色 = 体重）=====
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  if (wData.length > 0) {
+    ctx.fillStyle = weightColor;
+    ctx.fillText((wLow + wRange).toFixed(1), padL - 4, padT + 4);
+    ctx.fillText(wLow.toFixed(1), padL - 4, padT + innerH);
+  }
+
+  // ===== 右Y轴标签（红色 = 体脂）=====
+  ctx.textAlign = 'left';
+  if (fData.length > 0) {
+    ctx.fillStyle = fatColor;
+    ctx.fillText((fLow + fRange).toFixed(1), w - padR + 4, padT + 4);
+    ctx.fillText(fLow.toFixed(1), w - padR + 4, padT + innerH);
+  }
+
+  // ===== 底部日期（最早 / 中间 / 最近）=====
+  ctx.fillStyle = '#8a8579';
+  ctx.textAlign = 'center';
+  ctx.font = '9px sans-serif';
+  if (allDates.length >= 1) {
+    const first = allDates[0].slice(5);
+    const last = allDates[allDates.length - 1].slice(5);
+    ctx.fillText(first, padL, h - 4);
+    ctx.fillText(last, w - padR, h - 4);
+    if (allDates.length >= 3) {
+      const mid = allDates[Math.floor(allDates.length / 2)].slice(5);
+      ctx.fillText(mid, padL + innerW / 2, h - 4);
+    }
+  }
 }
 
 // ============ RENDER: 365 GRID ============
@@ -1148,9 +1440,14 @@ document.getElementById('menuBtn').addEventListener('click', () => {
 function manageAnnual() {
   let html = '<div class="modal-title">年 度 习 惯</div><div class="menu-list">';
   data.annual.forEach(h => {
-    html += `<div class="menu-item">
-      <span>${escapeHTML(h.name)}</span>
-      <span class="delete-x" onclick="removeAnnual('${h.id}')">移除</span>
+    html += `<div class="menu-item" style="flex-direction:column;align-items:flex-start;gap:6px;">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+        <span style="font-weight:500;">${escapeHTML(h.name)}</span>
+        <span class="delete-x" onclick="removeAnnual('${h.id}')">移除</span>
+      </div>
+      <input type="text" value="${escapeHTML(h.note || '')}" placeholder="标准备注（可选）"
+        style="width:100%;padding:6px 8px;border:1px solid var(--rule);background:var(--bg);font-family:inherit;font-size:12px;border-radius:2px;"
+        onchange="updateAnnualNote('${h.id}', this.value)">
     </div>`;
   });
   html += '</div>';
@@ -1160,6 +1457,15 @@ function manageAnnual() {
       <button class="primary" onclick="addAnnual()">添加</button>
     </div>`;
   showModal(html);
+}
+
+function updateAnnualNote(id, note) {
+  const habit = data.annual.find(h => h.id === id);
+  if (habit) {
+    habit.note = note.trim();
+    saveData();
+    renderAnnual();
+  }
 }
 
 function addAnnual() {
