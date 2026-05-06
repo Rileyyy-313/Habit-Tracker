@@ -422,6 +422,53 @@
     border-bottom: 1px dashed var(--rule);
   }
 
+  .date-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .date-picker-label {
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.05em;
+  }
+
+  .date-picker-display {
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .date-picker-display:hover {
+    border-color: var(--ink-soft);
+  }
+
+  .date-picker-display.date-picker-past {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(199, 80, 63, 0.05);
+  }
+
+  .date-picker-input {
+    /* 隐藏原生input,只用作日历的触发器 */
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+
   .combined-input-cell .numeric-input-row {
     margin-bottom: 0;
   }
@@ -945,6 +992,11 @@ function renderCombinedWeightFat(container, weight, fat) {
 
   const block = document.createElement('div');
   block.innerHTML = `
+    <div class="date-picker-row">
+      <span class="date-picker-label">记录日期</span>
+      <button class="date-picker-display" id="datePickerBtn" data-date="${todayKey}">今日</button>
+      <input type="date" id="datePickerInput" class="date-picker-input" value="${todayKey}" max="${todayKey}">
+    </div>
     <div class="combined-inputs">
       <div class="combined-input-cell">
         <div class="numeric-header">
@@ -952,7 +1004,7 @@ function renderCombinedWeightFat(container, weight, fat) {
           <div class="numeric-latest">${latestW ? `${latestW.value} · ${latestW.date.slice(5)}` : '—'}</div>
         </div>
         <div class="numeric-input-row">
-          <input type="number" step="0.1" class="numeric-input" id="ni-${weight.id}" placeholder="今日">
+          <input type="number" step="0.1" class="numeric-input" id="ni-${weight.id}" placeholder="数值">
           <button class="numeric-submit" data-id="${weight.id}">记录</button>
         </div>
       </div>
@@ -962,7 +1014,7 @@ function renderCombinedWeightFat(container, weight, fat) {
           <div class="numeric-latest">${latestF ? `${latestF.value} · ${latestF.date.slice(5)}` : '—'}</div>
         </div>
         <div class="numeric-input-row">
-          <input type="number" step="0.1" class="numeric-input" id="ni-${fat.id}" placeholder="今日">
+          <input type="number" step="0.1" class="numeric-input" id="ni-${fat.id}" placeholder="数值">
           <button class="numeric-submit" data-id="${fat.id}">记录</button>
         </div>
       </div>
@@ -973,6 +1025,35 @@ function renderCombinedWeightFat(container, weight, fat) {
   `;
   container.appendChild(block);
 
+  // 日期选择器逻辑
+  const dateBtn = block.querySelector('#datePickerBtn');
+  const dateInput = block.querySelector('#datePickerInput');
+
+  // 点击按钮触发原生日历弹出
+  dateBtn.addEventListener('click', () => {
+    // showPicker是较新的API,fallback到focus+click
+    if (dateInput.showPicker) {
+      try { dateInput.showPicker(); } catch(e) { dateInput.focus(); dateInput.click(); }
+    } else {
+      dateInput.focus();
+      dateInput.click();
+    }
+  });
+
+  // 选了日期后更新显示
+  dateInput.addEventListener('change', () => {
+    const selected = dateInput.value;
+    if (!selected) return;
+    dateBtn.dataset.date = selected;
+    dateBtn.textContent = selected === todayKey ? '今日' : formatDateShort(selected);
+    // 选过去日期时变红色提示
+    if (selected !== todayKey) {
+      dateBtn.classList.add('date-picker-past');
+    } else {
+      dateBtn.classList.remove('date-picker-past');
+    }
+  });
+
   // 绑定输入按钮
   block.querySelectorAll('.numeric-submit').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -980,16 +1061,29 @@ function renderCombinedWeightFat(container, weight, fat) {
       const input = block.querySelector(`#ni-${id}`);
       const val = parseFloat(input.value);
       if (isNaN(val)) return;
+      const targetDate = dateBtn.dataset.date;
       if (!data.numericData[id]) data.numericData[id] = [];
-      data.numericData[id] = data.numericData[id].filter(r => r.date !== todayKey);
-      data.numericData[id].push({ date: todayKey, value: val });
+      // 移除目标日期已有记录,然后写入新值
+      data.numericData[id] = data.numericData[id].filter(r => r.date !== targetDate);
+      data.numericData[id].push({ date: targetDate, value: val });
       saveData();
       input.value = '';
+      // 记录后日期自动重置回今日
+      dateBtn.dataset.date = todayKey;
+      dateBtn.textContent = '今日';
+      dateBtn.classList.remove('date-picker-past');
+      dateInput.value = todayKey;
       renderNumeric();
     });
   });
 
   drawCombinedChart('chart-combined', weightRecords, fatRecords);
+}
+
+function formatDateShort(dateStr) {
+  // 'YYYY-MM-DD' -> 'M月D日'
+  const parts = dateStr.split('-');
+  return `${parseInt(parts[1])}月${parseInt(parts[2])}日`;
 }
 
 function renderSingleNumeric(container, metric) {
