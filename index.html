@@ -473,6 +473,36 @@
     margin-bottom: 0;
   }
 
+  .combined-only-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .combined-only-input:focus {
+    outline: none;
+    border-color: var(--ink-soft);
+  }
+
+  .combined-submit-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .combined-submit-btn {
+    min-width: 120px;
+    padding: 8px 24px;
+    font-size: 13px;
+  }
+
   .dot {
     display: inline-block;
     width: 8px;
@@ -1003,21 +1033,18 @@ function renderCombinedWeightFat(container, weight, fat) {
           <div class="numeric-name"><span class="dot dot-weight"></span>${escapeHTML(weight.name)}</div>
           <div class="numeric-latest">${latestW ? `${latestW.value} · ${latestW.date.slice(5)}` : '—'}</div>
         </div>
-        <div class="numeric-input-row">
-          <input type="number" step="0.1" class="numeric-input" id="ni-${weight.id}" placeholder="数值">
-          <button class="numeric-submit" data-id="${weight.id}">记录</button>
-        </div>
+        <input type="number" step="0.1" class="numeric-input combined-only-input" id="ni-${weight.id}" placeholder="数值">
       </div>
       <div class="combined-input-cell">
         <div class="numeric-header">
           <div class="numeric-name"><span class="dot dot-fat"></span>${escapeHTML(fat.name)}</div>
           <div class="numeric-latest">${latestF ? `${latestF.value} · ${latestF.date.slice(5)}` : '—'}</div>
         </div>
-        <div class="numeric-input-row">
-          <input type="number" step="0.1" class="numeric-input" id="ni-${fat.id}" placeholder="数值">
-          <button class="numeric-submit" data-id="${fat.id}">记录</button>
-        </div>
+        <input type="number" step="0.1" class="numeric-input combined-only-input" id="ni-${fat.id}" placeholder="数值">
       </div>
+    </div>
+    <div class="combined-submit-row">
+      <button class="numeric-submit combined-submit-btn" id="combinedSubmitBtn">记录</button>
     </div>
     <div class="chart-container chart-large">
       <canvas id="chart-combined" style="width:100%;height:160px;"></canvas>
@@ -1029,9 +1056,7 @@ function renderCombinedWeightFat(container, weight, fat) {
   const dateBtn = block.querySelector('#datePickerBtn');
   const dateInput = block.querySelector('#datePickerInput');
 
-  // 点击按钮触发原生日历弹出
   dateBtn.addEventListener('click', () => {
-    // showPicker是较新的API,fallback到focus+click
     if (dateInput.showPicker) {
       try { dateInput.showPicker(); } catch(e) { dateInput.focus(); dateInput.click(); }
     } else {
@@ -1040,13 +1065,11 @@ function renderCombinedWeightFat(container, weight, fat) {
     }
   });
 
-  // 选了日期后更新显示
   dateInput.addEventListener('change', () => {
     const selected = dateInput.value;
     if (!selected) return;
     dateBtn.dataset.date = selected;
     dateBtn.textContent = selected === todayKey ? '今日' : formatDateShort(selected);
-    // 选过去日期时变红色提示
     if (selected !== todayKey) {
       dateBtn.classList.add('date-picker-past');
     } else {
@@ -1054,26 +1077,54 @@ function renderCombinedWeightFat(container, weight, fat) {
     }
   });
 
-  // 绑定输入按钮
-  block.querySelectorAll('.numeric-submit').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      const input = block.querySelector(`#ni-${id}`);
-      const val = parseFloat(input.value);
-      if (isNaN(val)) return;
-      const targetDate = dateBtn.dataset.date;
-      if (!data.numericData[id]) data.numericData[id] = [];
-      // 移除目标日期已有记录,然后写入新值
-      data.numericData[id] = data.numericData[id].filter(r => r.date !== targetDate);
-      data.numericData[id].push({ date: targetDate, value: val });
-      saveData();
-      input.value = '';
-      // 记录后日期自动重置回今日
-      dateBtn.dataset.date = todayKey;
-      dateBtn.textContent = '今日';
-      dateBtn.classList.remove('date-picker-past');
-      dateInput.value = todayKey;
-      renderNumeric();
+  // 单一记录按钮: 同时处理体重和体脂
+  const submitBtn = block.querySelector('#combinedSubmitBtn');
+  const weightInput = block.querySelector(`#ni-${weight.id}`);
+  const fatInput = block.querySelector(`#ni-${fat.id}`);
+
+  function submitRecord() {
+    const wVal = parseFloat(weightInput.value);
+    const fVal = parseFloat(fatInput.value);
+    const targetDate = dateBtn.dataset.date;
+
+    // 两个都没填,什么都不做
+    if (isNaN(wVal) && isNaN(fVal)) return;
+
+    // 写入体重(如果有效)
+    if (!isNaN(wVal)) {
+      if (!data.numericData[weight.id]) data.numericData[weight.id] = [];
+      data.numericData[weight.id] = data.numericData[weight.id].filter(r => r.date !== targetDate);
+      data.numericData[weight.id].push({ date: targetDate, value: wVal });
+    }
+
+    // 写入体脂(如果有效)
+    if (!isNaN(fVal)) {
+      if (!data.numericData[fat.id]) data.numericData[fat.id] = [];
+      data.numericData[fat.id] = data.numericData[fat.id].filter(r => r.date !== targetDate);
+      data.numericData[fat.id].push({ date: targetDate, value: fVal });
+    }
+
+    saveData();
+
+    // 清空输入,日期重置回今日
+    weightInput.value = '';
+    fatInput.value = '';
+    dateBtn.dataset.date = todayKey;
+    dateBtn.textContent = '今日';
+    dateBtn.classList.remove('date-picker-past');
+    dateInput.value = todayKey;
+    renderNumeric();
+  }
+
+  submitBtn.addEventListener('click', submitRecord);
+
+  // Enter键也能提交(常用快捷操作)
+  [weightInput, fatInput].forEach(inp => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitRecord();
+      }
     });
   });
 
