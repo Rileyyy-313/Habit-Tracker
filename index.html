@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="手帐">
+<title>手帐</title>
+<style>
+  :root {
+    --bg: #f7f5f0;
+    --paper: #fdfcf8;
+    --ink: #1a1a1a;
+    --ink-soft: #6b6760;
+    --ink-faint: #c8c3b8;
+    --rule: #e8e4d8;
+    --fill: #2c2a26;
+    --fill-soft: #8a8579;
+    --accent: #c7503f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Noto Serif SC', 'Songti SC', 'Source Han Serif', 'STSong', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 80px;
+  }
+
+  /* ============ HEADER ============ */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 4px 24px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 28px;
+  }
+
+  .title {
+    font-family: 'Noto Serif SC', serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+  }
+
+  .today {
+    font-family: 'Noto Serif SC', serif;
+    color: var(--ink-soft);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  .menu-btn {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-family: inherit;
+  }
+
+  /* ============ SECTION ============ */
+  .section {
+    margin-bottom: 36px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding: 0 2px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--ink);
+    text-transform: uppercase;
+  }
+
+  .section-meta {
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.05em;
+  }
+
+  /* ============ YEAR GRID (annual habits) ============ */
+  .year-grid {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 14px 12px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+
+  .habit-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+
+  .habit-name {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+
+  .habit-stats {
+    font-size: 10px;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+  }
+
+  .year-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .year-row {
+    display: grid;
+    grid-template-columns: 18px repeat(31, 1fr);
+    gap: 2px;
+    align-items: center;
+  }
+
+  .month-label {
+    font-size: 9px;
+    color: var(--ink-soft);
+    text-align: right;
+    padding-right: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .day-cell {
+    aspect-ratio: 1;
+    background: transparent;
+    border: 0.5px solid var(--rule);
+    border-radius: 1px;
+    cursor: pointer;
+    transition: background 0.08s ease, transform 0.08s ease;
+    position: relative;
+    min-height: 12px;
+  }
+
+  .day-cell.invalid {
+    background: transparent;
+    border: 0.5px dashed transparent;
+    cursor: default;
+    opacity: 0.15;
+  }
+
+  .day-cell.today-mark {
+    border: 1px solid var(--accent);
+  }
+
+  .day-cell.filled {
+    background: var(--fill);
+    border-color: var(--fill);
+  }
+
+  .day-cell.missed {
+    background: transparent;
+    border-color: var(--ink-faint);
+    position: relative;
+  }
+
+  .day-cell.missed::before,
+  .day-cell.missed::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 15%;
+    right: 15%;
+    height: 1px;
+    background: var(--ink-soft);
+    transform-origin: center;
+  }
+
+  .day-cell.missed::before {
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  .day-cell.missed::after {
+    transform: translateY(-50%) rotate(-45deg);
+  }
+
+  .day-cell:active:not(.invalid) {
+    transform: scale(0.85);
+  }
+
+  /* ============ MONTHLY MINI ============ */
+  .monthly-section {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 16px 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .monthly-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .month-nav {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .month-nav button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--ink-soft);
+    font-family: inherit;
+    padding: 2px 6px;
+  }
+
+  .month-display {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  .add-habit-btn {
+    background: none;
+    border: 1px solid var(--rule);
+    color: var(--ink-soft);
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.05em;
+    border-radius: 2px;
+  }
+
+  .add-habit-btn:active {
+    background: var(--rule);
+  }
+
+  .monthly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .monthly-item {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .monthly-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .monthly-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .monthly-item-stats {
+    font-size: 10px;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .delete-x {
+    color: var(--ink-faint);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(31, 1fr);
+    gap: 2px;
+  }
+
+  .month-grid .day-cell {
+    min-height: 14px;
+  }
+
+  /* ============ NUMERIC TRACKERS ============ */
+  .numeric-section {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 16px 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .numeric-item {
+    margin-bottom: 20px;
+  }
+
+  .numeric-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .numeric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .numeric-name {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+
+  .numeric-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .numeric-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .numeric-input:focus {
+    outline: none;
+    border-color: var(--ink-soft);
+  }
+
+  .numeric-submit {
+    padding: 6px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+
+  .numeric-latest {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chart-container {
+    margin-top: 8px;
+    height: 80px;
+    position: relative;
+  }
+
+  /* ============ 365 GRID ============ */
+  .grid-365 {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 16px 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .grid-365-canvas {
+    display: grid;
+    grid-template-columns: repeat(28, 1fr);
+    gap: 2px;
+    margin-top: 10px;
+  }
+
+  .grid-365 .day-cell {
+    min-height: 10px;
+  }
+
+  /* ============ MODAL ============ */
+  .modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,26,0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+
+  .modal-bg.show {
+    display: flex;
+  }
+
+  .modal {
+    background: var(--paper);
+    padding: 24px;
+    border-radius: 4px;
+    max-width: 360px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .modal input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    font-family: inherit;
+    font-size: 14px;
+    margin-bottom: 12px;
+    border-radius: 2px;
+  }
+
+  .modal input[type="text"]:focus {
+    outline: none;
+    border-color: var(--ink-soft);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .modal-actions button {
+    padding: 8px 16px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+
+  .modal-actions .primary {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+
+  .menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .menu-item {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .menu-item:last-child {
+    border-bottom: none;
+  }
+
+  .menu-item-meta {
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  /* ============ SCROLL ============ */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--ink-faint);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* ============ MOBILE ADJUSTMENTS ============ */
+  @media (max-width: 480px) {
+    body {
+      padding: 16px 12px 80px;
+    }
+
+    .day-cell {
+      min-height: 10px;
+    }
+
+    .month-label {
+      font-size: 8px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">手帐</div>
+  <div class="today" id="todayLabel">—</div>
+  <button class="menu-btn" id="menuBtn">⋯</button>
+</div>
+
+<!-- Annual habits -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">年 度 习 惯</div>
+    <div class="section-meta" id="yearLabel">—</div>
+  </div>
+  <div id="annualContainer"></div>
+</div>
+
+<!-- Monthly habits -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">月 度 习 惯</div>
+  </div>
+  <div class="monthly-section">
+    <div class="monthly-controls">
+      <div class="month-nav">
+        <button id="prevMonth">‹</button>
+        <div class="month-display" id="monthDisplay">—</div>
+        <button id="nextMonth">›</button>
+      </div>
+      <button class="add-habit-btn" id="addMonthlyBtn">+ 添加</button>
+    </div>
+    <div class="monthly-list" id="monthlyList"></div>
+  </div>
+</div>
+
+<!-- Numeric -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">数 值 记 录</div>
+  </div>
+  <div class="numeric-section" id="numericSection"></div>
+</div>
+
+<!-- 365 grid -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">日 舍 一 物</div>
+    <div class="section-meta" id="grid365Stats">—</div>
+  </div>
+  <div class="grid-365">
+    <div class="grid-365-canvas" id="grid365"></div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+// ============ DATA LAYER ============
+const STORAGE_KEY = 'shouzhang_v1';
+
+const defaultData = {
+  annual: [
+    { id: 'shower', name: '早洗澡' },
+    { id: 'exercise', name: '运动' },
+    { id: 'focus', name: '专注' },
+    { id: 'reading', name: '阅读' }
+  ],
+  monthly: [
+    { id: 'weight_log', name: '体重记录' },
+    { id: 'fat_log', name: '体脂记录' },
+    { id: 'wakeup', name: '9点前起床' },
+    { id: 'no_phone_bed', name: '起床不看手机' },
+    { id: 'wall_angel', name: 'Wall Angels 5个' },
+    { id: 'probiotic', name: '益生菌' },
+    { id: 'poop', name: '拉屎记录' },
+    { id: 'no_drink', name: '不喝饮料' },
+    { id: 'budget', name: '记账' },
+    { id: 'savings', name: '攒小钱/还花呗' }
+  ],
+  numeric: [
+    { id: 'weight', name: '体重 (kg)', unit: 'kg' },
+    { id: 'bodyfat', name: '体脂 (%)', unit: '%' }
+  ],
+  // checks: { 'habitId': { 'YYYY-MM-DD': true } }
+  checks: {},
+  // numericData: { 'metricId': [{date, value}] }
+  numericData: {},
+  // 365: { 'YYYY': { dayIndex: true } }  -- dayIndex 0~364
+  grid365: {}
+};
+
+let data = loadData();
+
+function loadData() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Merge with defaults to handle missing fields
+      return {
+        ...defaultData,
+        ...parsed,
+        checks: parsed.checks || {},
+        numericData: parsed.numericData || {},
+        grid365: parsed.grid365 || {}
+      };
+    }
+  } catch(e) { console.error(e); }
+  return JSON.parse(JSON.stringify(defaultData));
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ============ DATE UTILS ============
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function ymd(date) {
+  return date.getFullYear() + '-' + pad(date.getMonth()+1) + '-' + pad(date.getDate());
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function dayOfYear(date) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const diff = date - start;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function isLeapYear(y) {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+function daysInYear(y) {
+  return isLeapYear(y) ? 366 : 365;
+}
+
+// ============ STATE ============
+const today = new Date();
+const todayKey = ymd(today);
+let currentMonth = today.getMonth();
+let currentYear = today.getFullYear();
+let viewMonth = currentMonth;
+let viewYear = currentYear;
+
+// ============ RENDER: HEADER ============
+function renderHeader() {
+  const wkdays = ['日','一','二','三','四','五','六'];
+  const t = new Date();
+  document.getElementById('todayLabel').textContent =
+    `${t.getMonth()+1}月${t.getDate()}日 · 周${wkdays[t.getDay()]}`;
+  document.getElementById('yearLabel').textContent = currentYear + '年';
+}
+
+// ============ RENDER: ANNUAL ============
+function renderAnnual() {
+  const container = document.getElementById('annualContainer');
+  container.innerHTML = '';
+
+  data.annual.forEach(habit => {
+    const card = document.createElement('div');
+    card.className = 'year-grid';
+
+    // header with stats
+    const monthCount = countMonthChecks(habit.id, currentYear, currentMonth);
+    const monthMissed = countMonthMissed(habit.id, currentYear, currentMonth);
+    const weekCount = countWeekChecks(habit.id);
+    const yearCount = countYearChecks(habit.id, currentYear);
+
+    const monthStr = monthMissed > 0
+      ? `本月 ✓${monthCount} ✗${monthMissed}`
+      : `本月 ${monthCount}`;
+
+    card.innerHTML = `
+      <div class="habit-label">
+        <div class="habit-name">${escapeHTML(habit.name)}</div>
+        <div class="habit-stats">本周 ${weekCount}/7 · ${monthStr} · 全年 ${yearCount}</div>
+      </div>
+      <div class="year-rows" id="rows-${habit.id}"></div>
+    `;
+    container.appendChild(card);
+
+    const rowsEl = card.querySelector(`#rows-${habit.id}`);
+    for (let m = 0; m < 12; m++) {
+      const row = document.createElement('div');
+      row.className = 'year-row';
+
+      const label = document.createElement('div');
+      label.className = 'month-label';
+      label.textContent = (m + 1);
+      row.appendChild(label);
+
+      const dim = daysInMonth(currentYear, m);
+      for (let d = 1; d <= 31; d++) {
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+        if (d > dim) {
+          cell.classList.add('invalid');
+        } else {
+          const dateStr = `${currentYear}-${pad(m+1)}-${pad(d)}`;
+          const status = data.checks[habit.id]?.[dateStr];
+          if (status === true || status === 'done') {
+            cell.classList.add('filled');
+          } else if (status === 'missed') {
+            cell.classList.add('missed');
+          }
+          if (dateStr === todayKey) {
+            cell.classList.add('today-mark');
+          }
+          cell.dataset.habit = habit.id;
+          cell.dataset.date = dateStr;
+          cell.addEventListener('click', () => toggleCheck(habit.id, dateStr));
+        }
+        row.appendChild(cell);
+      }
+
+      rowsEl.appendChild(row);
+    }
+  });
+}
+
+// ============ RENDER: MONTHLY ============
+function renderMonthly() {
+  document.getElementById('monthDisplay').textContent = `${viewYear}.${pad(viewMonth+1)}`;
+
+  const list = document.getElementById('monthlyList');
+  list.innerHTML = '';
+
+  if (data.monthly.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:var(--ink-soft);font-size:12px;padding:20px;">本月无小项 · 点击右上角添加</div>';
+    return;
+  }
+
+  data.monthly.forEach(habit => {
+    const item = document.createElement('div');
+    item.className = 'monthly-item';
+
+    const monthCount = countMonthChecks(habit.id, viewYear, viewMonth);
+    const missedCount = countMonthMissed(habit.id, viewYear, viewMonth);
+    const dim = daysInMonth(viewYear, viewMonth);
+
+    const statsText = missedCount > 0
+      ? `✓ ${monthCount} · ✗ ${missedCount} / ${dim}`
+      : `${monthCount}/${dim}`;
+
+    item.innerHTML = `
+      <div class="monthly-item-header">
+        <div class="monthly-item-name">
+          ${escapeHTML(habit.name)}
+          <span class="delete-x" data-id="${habit.id}">×</span>
+        </div>
+        <div class="monthly-item-stats">${statsText}</div>
+      </div>
+      <div class="month-grid" id="mg-${habit.id}"></div>
+    `;
+
+    list.appendChild(item);
+
+    const grid = item.querySelector(`#mg-${habit.id}`);
+    for (let d = 1; d <= 31; d++) {
+      const cell = document.createElement('div');
+      cell.className = 'day-cell';
+      if (d > dim) {
+        cell.classList.add('invalid');
+      } else {
+        const dateStr = `${viewYear}-${pad(viewMonth+1)}-${pad(d)}`;
+        const status = data.checks[habit.id]?.[dateStr];
+        if (status === true || status === 'done') {
+          cell.classList.add('filled');
+        } else if (status === 'missed') {
+          cell.classList.add('missed');
+        }
+        if (dateStr === todayKey) {
+          cell.classList.add('today-mark');
+        }
+        cell.addEventListener('click', () => toggleCheck(habit.id, dateStr));
+      }
+      grid.appendChild(cell);
+    }
+
+    item.querySelector('.delete-x').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`从月度列表移除「${habit.name}」？\n（已有的打卡记录会保留，可重新添加）`)) {
+        data.monthly = data.monthly.filter(h => h.id !== habit.id);
+        saveData();
+        renderMonthly();
+      }
+    });
+  });
+}
+
+// ============ RENDER: NUMERIC ============
+function renderNumeric() {
+  const container = document.getElementById('numericSection');
+  container.innerHTML = '';
+
+  data.numeric.forEach(metric => {
+    const records = data.numericData[metric.id] || [];
+    const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+
+    const item = document.createElement('div');
+    item.className = 'numeric-item';
+    item.innerHTML = `
+      <div class="numeric-header">
+        <div class="numeric-name">${escapeHTML(metric.name)}</div>
+        <div class="numeric-latest">${latest ? `最近：${latest.value} · ${latest.date}` : '暂无记录'}</div>
+      </div>
+      <div class="numeric-input-row">
+        <input type="number" step="0.1" class="numeric-input" id="ni-${metric.id}" placeholder="今日数值">
+        <button class="numeric-submit" data-id="${metric.id}">记录</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-${metric.id}" style="width:100%;height:80px;"></canvas>
+      </div>
+    `;
+    container.appendChild(item);
+
+    item.querySelector('.numeric-submit').addEventListener('click', () => {
+      const input = item.querySelector(`#ni-${metric.id}`);
+      const val = parseFloat(input.value);
+      if (isNaN(val)) return;
+      if (!data.numericData[metric.id]) data.numericData[metric.id] = [];
+      // remove today's existing record if any
+      data.numericData[metric.id] = data.numericData[metric.id].filter(r => r.date !== todayKey);
+      data.numericData[metric.id].push({ date: todayKey, value: val });
+      saveData();
+      input.value = '';
+      renderNumeric();
+    });
+
+    drawChart(`chart-${metric.id}`, sorted);
+  });
+}
+
+function drawChart(canvasId, records) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || records.length === 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  const pad = 4;
+
+  // Use last 60 records max
+  const data = records.slice(-60);
+  if (data.length === 0) return;
+
+  const values = data.map(r => r.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  ctx.strokeStyle = '#2c2a26';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+
+  data.forEach((rec, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2*pad);
+    const y = h - pad - ((rec.value - min) / range) * (h - 2*pad);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // dots
+  ctx.fillStyle = '#2c2a26';
+  data.forEach((rec, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2*pad);
+    const y = h - pad - ((rec.value - min) / range) * (h - 2*pad);
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // min/max labels
+  ctx.fillStyle = '#8a8579';
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(max.toFixed(1), w - 2, 10);
+  ctx.fillText(min.toFixed(1), w - 2, h - 2);
+}
+
+// ============ RENDER: 365 GRID ============
+function render365() {
+  const grid = document.getElementById('grid365');
+  grid.innerHTML = '';
+  const totalDays = daysInYear(currentYear);
+  const yearChecks = data.grid365[currentYear] || {};
+  const todayDayIdx = dayOfYear(today) - 1;
+
+  let count = 0;
+  for (let i = 0; i < totalDays; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'day-cell';
+    if (yearChecks[i]) {
+      cell.classList.add('filled');
+      count++;
+    }
+    if (i === todayDayIdx && currentYear === today.getFullYear()) {
+      cell.classList.add('today-mark');
+    }
+    cell.addEventListener('click', () => {
+      if (!data.grid365[currentYear]) data.grid365[currentYear] = {};
+      if (data.grid365[currentYear][i]) {
+        delete data.grid365[currentYear][i];
+      } else {
+        data.grid365[currentYear][i] = true;
+      }
+      saveData();
+      render365();
+    });
+    grid.appendChild(cell);
+  }
+
+  document.getElementById('grid365Stats').textContent = `${count}/${totalDays}`;
+}
+
+// ============ ACTIONS ============
+function toggleCheck(habitId, dateStr) {
+  if (!data.checks[habitId]) data.checks[habitId] = {};
+  const current = data.checks[habitId][dateStr];
+  // 三态循环：空白 → done → missed → 空白
+  // 兼容旧数据：true 被视为 'done'
+  let next;
+  if (!current) {
+    next = 'done';
+  } else if (current === true || current === 'done') {
+    next = 'missed';
+  } else {
+    next = null; // missed → 空白
+  }
+
+  if (next === null) {
+    delete data.checks[habitId][dateStr];
+  } else {
+    data.checks[habitId][dateStr] = next;
+  }
+  saveData();
+  renderAnnual();
+  renderMonthly();
+}
+
+// 判断某天是否算"打卡完成"（用于统计）
+function isDone(habitId, dateStr) {
+  const v = data.checks[habitId]?.[dateStr];
+  return v === true || v === 'done';
+}
+
+// 判断某天是否标记为"未做到"
+function isMissed(habitId, dateStr) {
+  return data.checks[habitId]?.[dateStr] === 'missed';
+}
+
+function countMonthChecks(habitId, year, month) {
+  const checks = data.checks[habitId] || {};
+  const prefix = `${year}-${pad(month+1)}-`;
+  return Object.keys(checks).filter(d => {
+    if (!d.startsWith(prefix)) return false;
+    const v = checks[d];
+    return v === true || v === 'done';
+  }).length;
+}
+
+function countMonthMissed(habitId, year, month) {
+  const checks = data.checks[habitId] || {};
+  const prefix = `${year}-${pad(month+1)}-`;
+  return Object.keys(checks).filter(d => {
+    if (!d.startsWith(prefix)) return false;
+    return checks[d] === 'missed';
+  }).length;
+}
+
+function countYearChecks(habitId, year) {
+  const checks = data.checks[habitId] || {};
+  return Object.keys(checks).filter(d => {
+    if (!d.startsWith(year + '-')) return false;
+    const v = checks[d];
+    return v === true || v === 'done';
+  }).length;
+}
+
+function countWeekChecks(habitId) {
+  const checks = data.checks[habitId] || {};
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - offset);
+  let count = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const v = checks[ymd(d)];
+    if (v === true || v === 'done') count++;
+  }
+  return count;
+}
+
+// ============ MODAL ============
+function showModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+function hideModal() {
+  document.getElementById('modalBg').classList.remove('show');
+}
+
+document.getElementById('modalBg').addEventListener('click', (e) => {
+  if (e.target.id === 'modalBg') hideModal();
+});
+
+// ============ ADD MONTHLY ============
+document.getElementById('addMonthlyBtn').addEventListener('click', () => {
+  showModal(`
+    <div class="modal-title">添 加 月 度 习 惯</div>
+    <input type="text" id="newHabitName" placeholder="习惯名称" autofocus>
+    <div class="modal-actions">
+      <button onclick="hideModal()">取消</button>
+      <button class="primary" onclick="addMonthly()">添加</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('newHabitName').focus(), 100);
+});
+
+function addMonthly() {
+  const name = document.getElementById('newHabitName').value.trim();
+  if (!name) return;
+  const id = 'h_' + Date.now();
+  data.monthly.push({ id, name });
+  saveData();
+  hideModal();
+  renderMonthly();
+}
+
+// ============ MONTH NAV ============
+document.getElementById('prevMonth').addEventListener('click', () => {
+  viewMonth--;
+  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  renderMonthly();
+});
+
+document.getElementById('nextMonth').addEventListener('click', () => {
+  viewMonth++;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderMonthly();
+});
+
+// ============ MENU ============
+document.getElementById('menuBtn').addEventListener('click', () => {
+  showModal(`
+    <div class="modal-title">设 置</div>
+    <div class="menu-list">
+      <div class="menu-item" onclick="manageAnnual()">
+        <span>编辑年度习惯</span>
+        <span class="menu-item-meta">${data.annual.length} 项</span>
+      </div>
+      <div class="menu-item" onclick="manageNumeric()">
+        <span>编辑数值记录</span>
+        <span class="menu-item-meta">${data.numeric.length} 项</span>
+      </div>
+      <div class="menu-item" onclick="changeYear()">
+        <span>切换年视图</span>
+        <span class="menu-item-meta">${currentYear}</span>
+      </div>
+      <div class="menu-item" onclick="exportData()">
+        <span>导出数据备份</span>
+        <span class="menu-item-meta">JSON</span>
+      </div>
+      <div class="menu-item" onclick="importData()">
+        <span>导入数据</span>
+        <span class="menu-item-meta">恢复</span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="hideModal()">关闭</button>
+    </div>
+  `);
+});
+
+function manageAnnual() {
+  let html = '<div class="modal-title">年 度 习 惯</div><div class="menu-list">';
+  data.annual.forEach(h => {
+    html += `<div class="menu-item">
+      <span>${escapeHTML(h.name)}</span>
+      <span class="delete-x" onclick="removeAnnual('${h.id}')">移除</span>
+    </div>`;
+  });
+  html += '</div>';
+  html += `<input type="text" id="newAnnualName" placeholder="新增年度习惯" style="margin-top:16px;">
+    <div class="modal-actions">
+      <button onclick="hideModal()">关闭</button>
+      <button class="primary" onclick="addAnnual()">添加</button>
+    </div>`;
+  showModal(html);
+}
+
+function addAnnual() {
+  const name = document.getElementById('newAnnualName').value.trim();
+  if (!name) return;
+  data.annual.push({ id: 'a_' + Date.now(), name });
+  saveData();
+  manageAnnual();
+  renderAnnual();
+}
+
+function removeAnnual(id) {
+  if (!confirm('移除这个年度习惯？打卡记录会保留，可重新添加。')) return;
+  data.annual = data.annual.filter(h => h.id !== id);
+  saveData();
+  manageAnnual();
+  renderAnnual();
+}
+
+function manageNumeric() {
+  let html = '<div class="modal-title">数 值 记 录</div><div class="menu-list">';
+  data.numeric.forEach(m => {
+    html += `<div class="menu-item">
+      <span>${escapeHTML(m.name)}</span>
+      <span class="delete-x" onclick="removeNumeric('${m.id}')">移除</span>
+    </div>`;
+  });
+  html += '</div>';
+  html += `<input type="text" id="newNumericName" placeholder="新增数值项 (例：睡眠时长 (h))" style="margin-top:16px;">
+    <div class="modal-actions">
+      <button onclick="hideModal()">关闭</button>
+      <button class="primary" onclick="addNumeric()">添加</button>
+    </div>`;
+  showModal(html);
+}
+
+function addNumeric() {
+  const name = document.getElementById('newNumericName').value.trim();
+  if (!name) return;
+  data.numeric.push({ id: 'n_' + Date.now(), name });
+  saveData();
+  manageNumeric();
+  renderNumeric();
+}
+
+function removeNumeric(id) {
+  if (!confirm('移除这个数值项？历史数据会保留。')) return;
+  data.numeric = data.numeric.filter(m => m.id !== id);
+  saveData();
+  manageNumeric();
+  renderNumeric();
+}
+
+function changeYear() {
+  const y = prompt('查看哪一年？', currentYear);
+  if (!y) return;
+  const yi = parseInt(y);
+  if (isNaN(yi) || yi < 2000 || yi > 2100) return;
+  currentYear = yi;
+  viewYear = yi;
+  hideModal();
+  renderAll();
+}
+
+function exportData() {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `shouzhang-backup-${todayKey}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (confirm('确认导入？当前数据将被覆盖。')) {
+          data = { ...defaultData, ...imported };
+          saveData();
+          hideModal();
+          renderAll();
+        }
+      } catch(err) {
+        alert('文件格式错误');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ============ UTILS ============
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ============ INIT ============
+function renderAll() {
+  renderHeader();
+  renderAnnual();
+  renderMonthly();
+  renderNumeric();
+  render365();
+}
+
+renderAll();
+
+// re-draw charts on resize
+window.addEventListener('resize', () => {
+  setTimeout(renderNumeric, 100);
+});
+</script>
+
+</body>
+</html>
